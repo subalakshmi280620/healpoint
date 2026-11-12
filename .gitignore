@@ -1,0 +1,19 @@
+# Environment secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Dependencies and generated files
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+coverage/
+*.log
+*.sqlite3
+*.sqlite
+*.db
+.DS_Store

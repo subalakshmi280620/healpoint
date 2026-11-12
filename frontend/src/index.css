@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
+
+:root {
+  font-family: 'Inter', sans-serif;
+  color: #31485e;
+  background: #f5f8fc;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  --navy-950: #0c253a;
+  --navy-700: #193f5d;
+  --cyan-600: #32aaa7;
+  --heading: 'Poppins', sans-serif;
+  --motion-fast: 160ms;
+  --motion-base: 240ms;
+  --motion-enter: 420ms;
+  --motion-ease: cubic-bezier(0.2, 0.75, 0.25, 1);
+  --motion-out: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+input,
+select {
+  font-family: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid rgba(54, 174, 172, 0.3);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: #c4eeeb;
+  color: #143b52;
+}
