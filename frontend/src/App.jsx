@@ -3,6 +3,7 @@ import axios from 'axios'
 import PatientPortal from './PatientPortal'
 import DoctorPortal from './DoctorPortal'
 import api from './api'
+import { clinicIdForAssociation, formFromDoctor, initialDoctorClinicId } from './doctorForm'
 import {
   Activity,
   ArrowRight,
@@ -614,7 +615,7 @@ function DashboardContent({
           <div className="table-head-actions">
             {page === 'clinics' && <button className="primary-small-button" onClick={() => setClinicEditor({ clinic: null })}><HeartPulse size={14} /> Add clinic</button>}
             {page === 'clinicAdmins' && userRole === 'platform_admin' && <button className="primary-small-button" onClick={() => setClinicAdminEditorOpen(true)}><ShieldCheck size={14} /> Add Clinic Admin</button>}
-            {page === 'doctors' && <button className="primary-small-button" onClick={() => setDoctorEditor({ doctor: null })}><Stethoscope size={14} /> Add doctor</button>}
+            {page === 'doctors' && <button className="primary-small-button" onClick={() => setDoctorEditor({ doctor: null })} disabled={loading}><Stethoscope size={14} /> Add doctor</button>}
             <button className="subtle-button" onClick={() => onRefresh()}><Activity size={15} /> Refresh</button>
           </div>
         </div>
@@ -811,51 +812,11 @@ function ClinicEditor({ token, clinic, onClose, onSaved }) {
   )
 }
 
-const emptyDoctorForm = (clinicId = '') => ({
-  userId: '',
-  name: '',
-  profileImage: '',
-  specialty: '',
-  qualification: '',
-  experienceYears: '0',
-  consultationFeeInr: '',
-  consultationDurationMinutes: '30',
-  languagesSpoken: '',
-  bio: '',
-  clinicId,
-  branchId: '',
-  weeklySchedule: [],
-  isActive: true,
-  clinicAssociationIsActive: true,
-})
-
-const formFromDoctor = (doctor, clinicId = '') => {
-  const association = doctor?.clinicAssociations?.find((item) =>
-    String(item.clinic?._id || item.clinic?.id || item.clinic) ===
-    String(clinicId || item.clinic?._id || item.clinic?.id || item.clinic)
-  ) || doctor?.clinicAssociations?.[0]
-  return {
-    ...emptyDoctorForm(clinicId || String(association?.clinic?._id || association?.clinic?.id || '')),
-    userId: String(doctor?.user?._id || doctor?.user || ''),
-    name: doctor?.user?.name || '',
-    profileImage: doctor?.profileImage || '',
-    specialty: String(doctor?.specialty?._id || doctor?.specialty || ''),
-    qualification: doctor?.qualification || '',
-    experienceYears: String(doctor?.experienceYears ?? 0),
-    consultationFeeInr: String(doctor?.consultationFeeInr ?? doctor?.consultationFee ?? ''),
-    consultationDurationMinutes: String(doctor?.consultationDurationMinutes || 30),
-    languagesSpoken: (doctor?.languagesSpoken || []).join(', '),
-    bio: doctor?.bio || '',
-    branchId: String(association?.branch?._id || association?.branch?.id || ''),
-    weeklySchedule: (association?.weeklySchedule || []).map((window) => ({ ...window })),
-    isActive: doctor?.isActive ?? true,
-    clinicAssociationIsActive: association?.isActive ?? true,
-  }
-}
-
 function DoctorEditor({ token, doctor, candidates, specialties, clinics, onClose, onSaved }) {
-  const [form, setForm] = useState(() => formFromDoctor(doctor, clinics[0]?.id || ''))
+  const initialClinicId = initialDoctorClinicId(doctor, clinics)
+  const [form, setForm] = useState(() => formFromDoctor(doctor, initialClinicId))
   const [error, setError] = useState('')
+  const [accountError, setAccountError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [creatingAccount, setCreatingAccount] = useState(false)
   const [accountSubmitting, setAccountSubmitting] = useState(false)
@@ -885,7 +846,7 @@ function DoctorEditor({ token, doctor, candidates, specialties, clinics, onClose
   const selectClinic = (event) => {
     const clinicId = event.target.value
     const association = doctor?.clinicAssociations?.find((item) =>
-      String(item.clinic?._id || item.clinic?.id || item.clinic) === String(clinicId)
+      clinicIdForAssociation(item) === String(clinicId)
     )
     setForm((current) => ({
       ...current,
@@ -904,7 +865,7 @@ function DoctorEditor({ token, doctor, candidates, specialties, clinics, onClose
       return
     }
     setForm({
-      ...formFromDoctor(candidate.doctorProfile, form.clinicId || clinics[0]?.id || ''),
+      ...formFromDoctor(candidate.doctorProfile, form.clinicId || initialClinicId),
       userId,
       name: candidate.name,
     })
@@ -912,29 +873,30 @@ function DoctorEditor({ token, doctor, candidates, specialties, clinics, onClose
 
   const createDoctorAccount = async () => {
     setError('')
+    setAccountError('')
     setAccountMessage('')
     if (!form.clinicId || !clinic?.isActive) {
-      setError('Choose an active clinic before creating a doctor account.')
+      setAccountError('Choose an active clinic before creating a doctor account.')
       return
     }
     if (accountForm.name.trim().length < 2 || accountForm.name.trim().length > 100) {
-      setError('Doctor name must be between 2 and 100 characters.')
+      setAccountError('Doctor name must be between 2 and 100 characters.')
       return
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(accountForm.email.trim())) {
-      setError('Enter a valid email address.')
+      setAccountError('Enter a valid email address.')
       return
     }
     if (Array.from(accountForm.password).length < 12) {
-      setError('Password must be at least 12 characters.')
+      setAccountError('Password must be at least 12 characters.')
       return
     }
     if (new TextEncoder().encode(accountForm.password).length > 72) {
-      setError('Password must not exceed 72 UTF-8 bytes.')
+      setAccountError('Password must not exceed 72 UTF-8 bytes.')
       return
     }
     if (accountForm.password !== accountForm.confirmPassword) {
-      setError('Passwords do not match.')
+      setAccountError('Passwords do not match.')
       return
     }
 
@@ -957,7 +919,7 @@ function DoctorEditor({ token, doctor, candidates, specialties, clinics, onClose
       setCreatingAccount(false)
       setAccountMessage('Account created. Complete the doctor profile and clinic assignment below.')
     } catch (requestError) {
-      setError(getErrorMessage(requestError))
+      setAccountError(getErrorMessage(requestError))
     } finally {
       setAccountSubmitting(false)
     }
@@ -1080,14 +1042,14 @@ function DoctorEditor({ token, doctor, candidates, specialties, clinics, onClose
             <label className="doctor-bio-field">About the doctor<textarea value={form.bio} onChange={update('bio')} maxLength={3000} rows={3} /></label>
           </div>
           {!doctor && <section className="clinic-branches-editor doctor-account-creation">
-            <div className="clinic-branches-heading"><div><strong>Doctor account</strong><span>Create a doctor login without enabling public doctor registration.</span></div><button type="button" className="subtle-button" onClick={() => { setCreatingAccount((current) => !current); setError('') }}>{creatingAccount ? 'Use existing account' : 'Create new account'}</button></div>
+            <div className="clinic-branches-heading"><div><strong>Doctor account</strong><span>Create a doctor login without enabling public doctor registration.</span></div><button type="button" className="subtle-button" onClick={() => { setCreatingAccount((current) => !current); setError(''); setAccountError('') }}>{creatingAccount ? 'Use existing account' : 'Create new account'}</button></div>
             {creatingAccount && <div className="doctor-form-grid">
               <label>Account name<input autoComplete="name" value={accountForm.name} onChange={(event) => setAccountForm((current) => ({ ...current, name: event.target.value }))} maxLength={100} /></label>
               <label>Email<input type="email" autoComplete="email" value={accountForm.email} onChange={(event) => setAccountForm((current) => ({ ...current, email: event.target.value }))} /></label>
               <label>Phone<input autoComplete="tel" value={accountForm.phone} onChange={(event) => setAccountForm((current) => ({ ...current, phone: event.target.value }))} maxLength={30} /></label>
               <label>Initial password<input type="password" autoComplete="new-password" value={accountForm.password} onChange={(event) => setAccountForm((current) => ({ ...current, password: event.target.value }))} minLength={12} /></label>
               <label>Confirm password<input type="password" autoComplete="new-password" value={accountForm.confirmPassword} onChange={(event) => setAccountForm((current) => ({ ...current, confirmPassword: event.target.value }))} minLength={12} /></label>
-              <div className="doctor-bio-field"><button type="button" className="primary-small-button" onClick={createDoctorAccount} disabled={accountSubmitting}>{accountSubmitting ? 'Creating account…' : 'Create doctor account'}</button></div>
+              <div className="doctor-bio-field"><button type="button" className="primary-small-button" onClick={createDoctorAccount} disabled={accountSubmitting}>{accountSubmitting ? 'Creating account…' : 'Create doctor account'}</button>{accountError && <div className="login-error" role="alert">{accountError}</div>}</div>
             </div>}
             {accountMessage && <div className="doctor-account-message" role="status">{accountMessage}</div>}
           </section>}
