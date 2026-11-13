@@ -191,7 +191,7 @@ export const getDoctorSlots = async (req, res) => {
     };
     const associations = await ClinicDoctor.find(associationFilter)
       .populate({ path: 'clinic', match: { isActive: true }, select: 'name address city state' })
-      .populate({ path: 'branch', match: { isActive: true }, select: 'name address city state' });
+      .populate({ path: 'branch', match: { isActive: true }, select: 'name address city state isActive' });
     const activeAssociations = associations.filter((association) =>
       association.clinic && (!association.branch || association.branch.isActive)
     );

@@ -7,6 +7,7 @@ import createApp from '../app.js';
 import connectTestDB from './helpers/connectTestDB.js';
 import Appointment from '../models/Appointment.js';
 import Clinic from '../models/Clinic.js';
+import ClinicBranch from '../models/ClinicBranch.js';
 import ClinicDoctor from '../models/ClinicDoctor.js';
 import DoctorProfile from '../models/DoctorProfile.js';
 import Notification from '../models/Notification.js';
@@ -174,6 +175,40 @@ describe('Patient appointment booking API', () => {
     assert.equal(response.body.data.associations[0].clinicDoctorId, String(clinicDoctor._id));
     assert.ok(response.body.data.associations[0].slots.length > 0);
     assert.ok(response.body.data.associations[0].slots.every((slot) => slot.durationMinutes === 30));
+  });
+
+  it('returns slots for an association with an active branch', async () => {
+    const branch = await ClinicBranch.create({
+      clinic: clinic._id,
+      name: `Appointment Branch ${suffix}`,
+      address: '2 Health Way',
+      city: 'Pune',
+      state: 'MH',
+      pincode: '411001',
+      isActive: true,
+    });
+    const originalBranch = clinicDoctor.branch;
+
+    try {
+      clinicDoctor.branch = branch._id;
+      await clinicDoctor.save();
+      const date = new Date(new Date(startAt).getTime() + 330 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
+      const response = await request(app)
+        .get(`/api/appointments/doctors/${doctorProfile._id}/slots`)
+        .query({ date });
+
+      assert.equal(response.status, 200);
+      assert.equal(response.body.data.associations.length, 1);
+      assert.equal(response.body.data.associations[0].clinicDoctorId, String(clinicDoctor._id));
+      assert.equal(response.body.data.associations[0].branch._id, String(branch._id));
+      assert.ok(response.body.data.associations[0].slots.length > 0);
+    } finally {
+      clinicDoctor.branch = originalBranch;
+      await clinicDoctor.save();
+      await ClinicBranch.deleteOne({ _id: branch._id });
+    }
   });
 
   it('rejects bookings outside the active clinic schedule', async () => {
