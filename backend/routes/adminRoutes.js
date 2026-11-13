@@ -10,6 +10,7 @@ import {
   createAdminDoctorAccount,
   createAdminClinicAdmin,
   getAdminClinicAdmins,
+  resetAdminClinicAdminPassword,
   updateAdminClinicAdminStatus,
   updateAdminAppointmentStatus,
   updateAdminUserStatus,
@@ -32,6 +33,7 @@ router.get('/users', getAdminUsers);
 router.patch('/users/:id/status', authorizeRoles('platform_admin'), updateAdminUserStatus);
 router.get('/clinic-admins', authorizeRoles('platform_admin'), getAdminClinicAdmins);
 router.post('/clinic-admins', authorizeRoles('platform_admin'), createAdminClinicAdmin);
+router.patch('/clinic-admins/:id/password', authorizeRoles('platform_admin'), resetAdminClinicAdminPassword);
 router.patch('/clinic-admins/:id/status', authorizeRoles('platform_admin'), updateAdminClinicAdminStatus);
 router.get('/appointments', getAdminAppointments);
 router.patch('/appointments/:id/status', updateAdminAppointmentStatus);

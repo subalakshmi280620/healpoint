@@ -9,7 +9,7 @@ import User from '../models/User.js';
 import { publishAppointmentNotifications } from '../services/appointmentNotifications.js';
 import { getClinicAdminClinicFilter, isClinicAdminForClinic } from '../utils/clinicAccess.js';
 import { escapeRegex, isValidObjectId, parsePagination } from '../utils/mongo.js';
-import { validateRegisterInput } from '../utils/validateAuth.js';
+import { validateNewPassword, validateRegisterInput } from '../utils/validateAuth.js';
 
 const USER_ROLES = ['patient', 'doctor'];
 const APPOINTMENT_STATUSES = ['confirmed', 'cancelled', 'completed'];
@@ -510,6 +510,39 @@ export const updateAdminClinicAdminStatus = async (req, res) => {
     return res.status(500).json({
       status: 'error',
       message: error.message || 'Unable to update Clinic Admin account status',
+    });
+  }
+};
+
+export const resetAdminClinicAdminPassword = async (req, res) => {
+  if (!isValidObjectId(req.params.id)) {
+    return res.status(400).json({ status: 'error', message: 'Invalid user id' });
+  }
+
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const passwordError = validateNewPassword(body.newPassword);
+  if (passwordError) {
+    return res.status(400).json({ status: 'error', message: passwordError });
+  }
+
+  try {
+    const user = await User.findOne({ _id: req.params.id, role: 'clinic_admin' });
+    if (!user) {
+      return res.status(404).json({ status: 'error', message: 'Clinic Admin account not found' });
+    }
+
+    user.password = body.newPassword;
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+    await user.save();
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Clinic Admin password reset successfully',
+    });
+  } catch {
+    return res.status(500).json({
+      status: 'error',
+      message: 'Unable to reset Clinic Admin password',
     });
   }
 };

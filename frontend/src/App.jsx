@@ -455,6 +455,7 @@ function DashboardContent({
   const [doctorEditor, setDoctorEditor] = useState(null)
   const [clinicEditor, setClinicEditor] = useState(null)
   const [clinicAdminEditorOpen, setClinicAdminEditorOpen] = useState(false)
+  const [clinicAdminPasswordReset, setClinicAdminPasswordReset] = useState(null)
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams({ page: String(pageNumber), limit: String(PAGE_SIZE) })
@@ -577,6 +578,14 @@ function DashboardContent({
     }
   }
 
+  const resetClinicAdminPassword = async (clinicAdmin, newPassword) => {
+    await api.patch(`/admin/clinic-admins/${clinicAdmin._id}/password`, { newPassword }, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    setClinicAdminPasswordReset(null)
+    onToast('Clinic Admin password reset successfully')
+  }
+
   const changeUserStatus = async (user) => {
     const nextStatus = !user.isActive
     const action = nextStatus ? 'activate' : 'deactivate'
@@ -621,7 +630,7 @@ function DashboardContent({
         </div>
         {error ? <ErrorState message={error} onRetry={() => onRefresh()} /> : loading ? <TableSkeleton /> : visibleRows.length === 0 ? <EmptyState page={page} searching={Boolean(search || statusFilter || fromDate || toDate)} /> : (
           page === 'clinicAdmins'
-            ? <ClinicAdminTable rows={visibleRows} onToggleStatus={changeClinicAdminStatus} />
+            ? <ClinicAdminTable rows={visibleRows} onToggleStatus={changeClinicAdminStatus} onResetPassword={(admin) => setClinicAdminPasswordReset(admin)} />
             : <DataTable page={page} rows={visibleRows} onAppointmentCancel={changeStatus} onEditDoctor={(doctor) => setDoctorEditor({ doctor })} onEditClinic={(clinic) => setClinicEditor({ clinic })} onToggleUserStatus={['patients', 'doctors'].includes(page) && userRole === 'platform_admin' ? changeUserStatus : null} />
         )}
         {!error && !loading && visibleRows.length > 0 && (
@@ -650,6 +659,12 @@ function DashboardContent({
           onToast('Clinic Admin account created')
           onRefresh()
         }}
+      />}
+      {clinicAdminPasswordReset && <ClinicAdminPasswordReset
+        clinicAdmin={clinicAdminPasswordReset}
+        onClose={() => setClinicAdminPasswordReset(null)}
+        onReset={resetClinicAdminPassword}
+        onUnauthorized={onUnauthorized}
       />}
       {clinicEditor && <ClinicEditor
         token={token}
@@ -1234,10 +1249,63 @@ function ClinicAdminEditor({ token, clinics, onClose, onCreated }) {
   )
 }
 
-function ClinicAdminTable({ rows, onToggleStatus }) {
+function ClinicAdminPasswordReset({ clinicAdmin, onClose, onReset, onUnauthorized }) {
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const submit = async (event) => {
+    event.preventDefault()
+    setError('')
+    if (Array.from(newPassword).length < 12) {
+      setError('Password must be at least 12 characters.')
+      return
+    }
+    if (new TextEncoder().encode(newPassword).length > 72) {
+      setError('Password must not exceed 72 UTF-8 bytes.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      await onReset(clinicAdmin, newPassword)
+    } catch (requestError) {
+      if (requestError.response?.status === 401) {
+        onUnauthorized()
+        return
+      }
+      setError(getErrorMessage(requestError))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="editor-overlay" role="presentation" onMouseDown={(event) => { if (!submitting && event.target === event.currentTarget) onClose() }}>
+      <section className="doctor-editor" role="dialog" aria-modal="true" aria-labelledby="clinic-admin-password-title">
+        <header className="doctor-editor-header"><div><span className="eyebrow">ADMIN ACCESS</span><h2 id="clinic-admin-password-title">Reset Password</h2><p>Set a new password for {clinicAdmin.name}. Their active sessions will be revoked.</p></div><button className="icon-button" aria-label="Close password reset form" onClick={onClose} disabled={submitting}><X size={18} /></button></header>
+        <form className="doctor-editor-form" onSubmit={submit}>
+          <div className="doctor-form-grid">
+            <label>New Password<input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required minLength={12} /></label>
+            <label>Confirm Password<input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required minLength={12} /></label>
+          </div>
+          {error && <div className="login-error" role="alert">{error}</div>}
+          <footer className="doctor-editor-footer"><button type="button" className="subtle-button" onClick={onClose} disabled={submitting}>Cancel</button><button type="submit" className="primary-small-button" disabled={submitting}>{submitting ? 'Resetting password…' : 'Reset Password'}</button></footer>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function ClinicAdminTable({ rows, onToggleStatus, onResetPassword }) {
   return (
     <div className="table-scroll"><table><thead><tr><th>CLINIC ADMIN</th><th>PHONE</th><th>ASSIGNED CLINIC</th><th>ACCOUNT STATUS</th><th>CREATED</th><th>ACCOUNT CONTROL</th></tr></thead><tbody>
-      {rows.map((admin) => <tr key={admin._id}><td><div className="table-person"><span className="avatar table-avatar">{initials(admin.name)}</span><div><strong>{admin.name}</strong><span>{admin.email}</span></div></div></td><td>{admin.phone || '—'}</td><td><span className="main-cell">{admin.clinic?.name || 'Clinic unavailable'}</span><span className="sub-cell">{admin.clinic?.city || ''}</span></td><td><StatusPill status={admin.isActive ? 'active' : 'inactive'} /></td><td>{formatDate(admin.createdAt)}</td><td><button className="row-edit-button" onClick={() => onToggleStatus(admin)}>{admin.isActive ? 'Deactivate' : 'Activate'}</button></td></tr>)}
+      {rows.map((admin) => <tr key={admin._id}><td><div className="table-person"><span className="avatar table-avatar">{initials(admin.name)}</span><div><strong>{admin.name}</strong><span>{admin.email}</span></div></div></td><td>{admin.phone || '—'}</td><td><span className="main-cell">{admin.clinic?.name || 'Clinic unavailable'}</span><span className="sub-cell">{admin.clinic?.city || ''}</span></td><td><StatusPill status={admin.isActive ? 'active' : 'inactive'} /></td><td>{formatDate(admin.createdAt)}</td><td><div className="clinic-admin-actions"><button className="row-edit-button" onClick={() => onResetPassword(admin)}>Reset Password</button><button className="row-edit-button" onClick={() => onToggleStatus(admin)}>{admin.isActive ? 'Deactivate' : 'Activate'}</button></div></td></tr>)}
     </tbody></table></div>
   )
 }

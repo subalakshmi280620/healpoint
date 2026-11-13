@@ -2,7 +2,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 12;
 const MAX_PASSWORD_BYTES = 72;
 
-const validateNewPassword = (password) => {
+export const validateNewPassword = (password) => {
   if (typeof password !== 'string' || password.length === 0) {
     return 'Password is required';
   }

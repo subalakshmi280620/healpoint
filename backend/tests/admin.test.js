@@ -427,6 +427,100 @@ describe('Admin dashboard APIs', () => {
     assert.equal(activeLogin.body.data.user.role, 'clinic_admin');
     assert.ok(!('password' in activeLogin.body.data.user));
 
+    const resetEndpoint = `${endpoint}/${assignedClinicAdmin._id}/password`;
+    const newPassword = 'NewClinicAdminPass123';
+    const unauthenticatedReset = await request(app)
+      .patch(resetEndpoint)
+      .send({ newPassword });
+    assert.equal(unauthenticatedReset.status, 401);
+
+    const clinicAdminResetDenied = await request(app)
+      .patch(resetEndpoint)
+      .set('Authorization', `Bearer ${clinicToken}`)
+      .send({ newPassword });
+    assert.equal(clinicAdminResetDenied.status, 403);
+
+    const patientResetDenied = await request(app)
+      .patch(resetEndpoint)
+      .set('Authorization', `Bearer ${patientToken}`)
+      .send({ newPassword });
+    assert.equal(patientResetDenied.status, 403);
+
+    const invalidResetId = await request(app)
+      .patch(`${endpoint}/invalid/password`)
+      .set('Authorization', `Bearer ${platformToken}`)
+      .send({ newPassword });
+    assert.equal(invalidResetId.status, 400);
+
+    const nonClinicAdminReset = await request(app)
+      .patch(`${endpoint}/${patient._id}/password`)
+      .set('Authorization', `Bearer ${platformToken}`)
+      .send({ newPassword });
+    assert.equal(nonClinicAdminReset.status, 404);
+
+    const weakPasswordReset = await request(app)
+      .patch(resetEndpoint)
+      .set('Authorization', `Bearer ${platformToken}`)
+      .send({ newPassword: '12345678901' });
+    assert.equal(weakPasswordReset.status, 400);
+    assert.match(weakPasswordReset.body.message, /12 characters/i);
+
+    const overlongUtf8PasswordReset = await request(app)
+      .patch(resetEndpoint)
+      .set('Authorization', `Bearer ${platformToken}`)
+      .send({ newPassword: '😀'.repeat(19) });
+    assert.equal(overlongUtf8PasswordReset.status, 400);
+    assert.match(overlongUtf8PasswordReset.body.message, /72 UTF-8 bytes/i);
+
+    const clinicAdminBeforeReset = {
+      email: assignedClinicAdmin.email,
+      role: assignedClinicAdmin.role,
+      clinic: String(assignedClinicAdmin.clinic),
+      isActive: assignedClinicAdmin.isActive,
+      tokenVersion: assignedClinicAdmin.tokenVersion,
+    };
+    const reset = await request(app)
+      .patch(resetEndpoint)
+      .set('Authorization', `Bearer ${platformToken}`)
+      .send({
+        newPassword,
+        email: 'changed@example.com',
+        role: 'platform_admin',
+        clinic: String(otherClinic._id),
+        isActive: false,
+      });
+    assert.equal(reset.status, 200);
+    assert.equal(JSON.stringify(reset.body).includes(newPassword), false);
+    assert.equal(JSON.stringify(reset.body).toLowerCase().includes('passwordhash'), false);
+
+    const savedClinicAdmin = await User.findById(assignedClinicAdmin._id).select('+password');
+    assert.equal(savedClinicAdmin.email, clinicAdminBeforeReset.email);
+    assert.equal(savedClinicAdmin.role, clinicAdminBeforeReset.role);
+    assert.equal(String(savedClinicAdmin.clinic), clinicAdminBeforeReset.clinic);
+    assert.equal(savedClinicAdmin.isActive, clinicAdminBeforeReset.isActive);
+    assert.equal(savedClinicAdmin.tokenVersion, clinicAdminBeforeReset.tokenVersion + 1);
+    assert.notEqual(savedClinicAdmin.password, newPassword);
+    assert.equal(await savedClinicAdmin.matchPassword(password), false);
+    assert.equal(await savedClinicAdmin.matchPassword(newPassword), true);
+
+    const revokedClinicAdminSessionAfterReset = await request(app)
+      .get('/api/auth/me/')
+      .set('Authorization', `Bearer ${assignedClinicAdminToken}`);
+    assert.equal(revokedClinicAdminSessionAfterReset.status, 401);
+
+    const oldPasswordLogin = await request(app)
+      .post('/api/auth/login/')
+      .send({ email: createPayload.email, password });
+    assert.equal(oldPasswordLogin.status, 401);
+
+    const newPasswordLogin = await request(app)
+      .post('/api/auth/login/')
+      .send({ email: createPayload.email, password: newPassword });
+    assert.equal(newPasswordLogin.status, 200);
+    assert.ok(!('password' in newPasswordLogin.body.data.user));
+    assignedClinicAdmin = savedClinicAdmin;
+    assignedClinicAdminToken = generateToken(assignedClinicAdmin._id, assignedClinicAdmin.tokenVersion);
+
     const duplicate = await request(app)
       .post(endpoint)
       .set('Authorization', `Bearer ${platformToken}`)
@@ -458,7 +552,7 @@ describe('Admin dashboard APIs', () => {
 
     const inactiveLogin = await request(app)
       .post('/api/auth/login/')
-      .send({ email: createPayload.email, password });
+      .send({ email: createPayload.email, password: newPassword });
     assert.equal(inactiveLogin.status, 403);
 
     const reactivate = await request(app)
